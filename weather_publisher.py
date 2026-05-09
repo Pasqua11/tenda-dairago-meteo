@@ -1,7 +1,8 @@
 """
 Weather Publisher per LOGO! 8.4 - Dairago
 Pubblica dati meteo da Open-Meteo verso broker HiveMQ Cloud.
-Formato: array compatibile con LOGO! 8.4 [vento×10, raffica×10, pioggia×10, nuvolosita, weather_code]
+Formato: payload proprietario Siemens compatibile con LOGO! 8.4 "Server Web LOGO!"
+   {"state":{"V..4:XX-2":"hexvalue"}}
 """
 
 import os
@@ -12,11 +13,12 @@ import paho.mqtt.client as mqtt
 import ssl
 import time
 
-# Configurazione
+# Configurazione meteo Dairago
 LATITUDE = 45.5689
 LONGITUDE = 8.8653
 TIMEZONE = "Europe/Rome"
 
+# Configurazione MQTT HiveMQ
 MQTT_HOST = "8c349a8ad07849a4be91ec8216b1a37a.s1.eu.hivemq.cloud"
 MQTT_PORT = 8883
 MQTT_USER = "make_publisher"
@@ -43,20 +45,47 @@ def fetch_weather():
     return data
 
 
+def to_logo_hex(value):
+    """
+    Converte valore decimale (0-65535) nel formato LOGO! 8.4 little-endian a 8 caratteri.
+    Esempio: 100 -> '00640000' (0x0064 = 100, padded little-endian)
+    """
+    value = max(0, min(65535, int(value)))
+    return f"{value:04X}0000"
+
+
 def build_payload(weather_data):
-    """Costruisce array di interi per LOGO! 8.4 (Formato Array)."""
+    """
+    Costruisce payload per LOGO! 8.4 in formato 'Server Web LOGO!'.
+    Sintassi: {"state":{"V..4:XX-2":"hexvalue"}}
+    """
     current = weather_data["current"]
     
     # Conversione: float * 10 per mantenere il decimale come intero
-    payload = [
-        round(current["wind_speed_10m"] * 10),    # [0] vento × 10 → VW20
-        round(current["wind_gusts_10m"] * 10),    # [1] raffica × 10 → VW22
-        round(current["precipitation"] * 10),     # [2] pioggia × 10 → VW24
-        round(current["cloud_cover"]),            # [3] nuvolosità → VW26
-        round(current["weather_code"])            # [4] weather code → VW28
-    ]
+    vento = round(current["wind_speed_10m"] * 10)
+    raffica = round(current["wind_gusts_10m"] * 10)
+    pioggia = round(current["precipitation"] * 10)
+    nuvolosita = round(current["cloud_cover"])
+    weather_code = round(current["weather_code"])
     
-    print(f"Payload costruito: {payload}")
+    # Formato corretto LOGO! 8.4: {"state":{"V..4:XX-2":"hexvalue"}}
+    payload = {
+        "state": {
+            "V..4:20-2": to_logo_hex(vento),        # VW20: vento × 10
+            "V..4:22-2": to_logo_hex(raffica),      # VW22: raffica × 10
+            "V..4:24-2": to_logo_hex(pioggia),      # VW24: pioggia × 10
+            "V..4:26-2": to_logo_hex(nuvolosita),   # VW26: nuvolosita %
+            "V..4:28-2": to_logo_hex(weather_code)  # VW28: weather code
+        }
+    }
+    
+    print(f"Payload costruito:")
+    print(f"  Vento:        {vento/10:.1f} km/h  -> {to_logo_hex(vento)}")
+    print(f"  Raffica:      {raffica/10:.1f} km/h  -> {to_logo_hex(raffica)}")
+    print(f"  Pioggia:      {pioggia/10:.1f} mm    -> {to_logo_hex(pioggia)}")
+    print(f"  Nuvolosita:   {nuvolosita}%         -> {to_logo_hex(nuvolosita)}")
+    print(f"  Weather code: {weather_code}        -> {to_logo_hex(weather_code)}")
+    
     return payload
 
 
@@ -66,7 +95,6 @@ def publish_mqtt(payload):
         print("ERRORE: HIVEMQ_PASSWORD non configurata!")
         sys.exit(1)
     
-    # Stato per gestire connessione asincrona
     connected = {"value": False}
     published = {"value": False}
     
@@ -81,7 +109,6 @@ def publish_mqtt(payload):
         print(f"Messaggio pubblicato (mid={mid})")
         published["value"] = True
     
-    # Crea client MQTT
     client = mqtt.Client(
         client_id=MQTT_CLIENT_ID,
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -89,88 +116,8 @@ def publish_mqtt(payload):
     )
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
     
-    # Configurazione TLS
     client.tls_set(
-        ca_certs=None,  # Usa CA di sistema (Let's Encrypt è incluso)
+        ca_certs=None,
         certfile=None,
         keyfile=None,
-        cert_reqs=ssl.CERT_REQUIRED,
-        tls_version=ssl.PROTOCOL_TLS_CLIENT
-    )
-    
-    client.on_connect = on_connect
-    client.on_publish = on_publish
-    
-    # Connessione
-    print(f"Connessione a {MQTT_HOST}:{MQTT_PORT}...")
-    client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
-    
-    # Loop in background
-    client.loop_start()
-    
-    # Aspetta connessione (max 10 sec)
-    timeout = 10
-    while not connected["value"] and timeout > 0:
-        time.sleep(0.5)
-        timeout -= 0.5
-    
-    if not connected["value"]:
-        print("ERRORE: Timeout connessione MQTT")
-        client.loop_stop()
-        sys.exit(1)
-    
-    # Pubblica
-    payload_json = json.dumps(payload)
-    print(f"Pubblicazione su topic '{MQTT_TOPIC}': {payload_json}")
-    
-    result = client.publish(
-        MQTT_TOPIC,
-        payload_json,
-        qos=1,
-        retain=True
-    )
-    
-    # Aspetta pubblicazione (max 5 sec)
-    timeout = 5
-    while not published["value"] and timeout > 0:
-        time.sleep(0.5)
-        timeout -= 0.5
-    
-    # Disconnessione pulita
-    client.loop_stop()
-    client.disconnect()
-    
-    if not published["value"]:
-        print("ERRORE: Timeout pubblicazione MQTT")
-        sys.exit(1)
-    
-    print("Pubblicazione completata con successo!")
-
-
-def main():
-    """Esegue il ciclo completo: fetch meteo → publish MQTT."""
-    try:
-        print("=" * 60)
-        print("Weather Publisher per LOGO! 8.4 - Dairago")
-        print("=" * 60)
-        
-        # 1. Recupera dati meteo
-        weather = fetch_weather()
-        
-        # 2. Costruisci payload
-        payload = build_payload(weather)
-        
-        # 3. Pubblica via MQTT
-        publish_mqtt(payload)
-        
-        print("=" * 60)
-        print("Esecuzione completata con successo")
-        print("=" * 60)
-        
-    except Exception as e:
-        print(f"ERRORE: {e}")
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+        cert_reqs=ssl.CERT_REQU
