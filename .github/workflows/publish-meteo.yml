@@ -2,10 +2,10 @@ name: Publish Weather Data to MQTT
 
 # Trigger: schedulato + manuale
 on:
-  # Schedule: ogni 10 minuti
+  # Schedule: ogni 15 minuti
   schedule:
-    - cron: '*/10 * * * *'
-    - cron: '5-55/10 * * * *'   # backup ai minuti 5,15,25,35,45,55
+    - cron: '*/15 * * * *'
+      
   
   # Permetti esecuzione manuale dal tab "Actions"
   workflow_dispatch:
