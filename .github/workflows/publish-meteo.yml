@@ -4,7 +4,7 @@ name: Publish Weather Data to MQTT
 on:
   # Schedule: ogni 15 minuti
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/16 * * * *'
       
   
   # Permetti esecuzione manuale dal tab "Actions"
