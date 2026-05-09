@@ -2,7 +2,7 @@ name: Publish Weather Data to MQTT
 
 # Trigger: schedulato + manuale
 on:
-  # Schedule: ogni 30 minuti
+  # Schedule: ogni 10 minuti
   schedule:
     - cron: '*/10 * * * *'
   
