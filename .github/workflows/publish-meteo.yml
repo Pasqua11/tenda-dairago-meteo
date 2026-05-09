@@ -5,6 +5,7 @@ on:
   # Schedule: ogni 10 minuti
   schedule:
     - cron: '*/10 * * * *'
+    - cron: '5-55/10 * * * *'   # backup ai minuti 5,15,25,35,45,55
   
   # Permetti esecuzione manuale dal tab "Actions"
   workflow_dispatch:
