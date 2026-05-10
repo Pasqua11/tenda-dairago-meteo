@@ -3,8 +3,8 @@ name: Publish Weather Data to MQTT
 # Trigger: schedulato + manuale
 on:
   # Schedule: ogni 15 minuti
-  schedule:
-    - cron: '*/16 * * * *'
+  # schedule:
+  #  - cron: '*/16 * * * *'
       
   
   # Permetti esecuzione manuale dal tab "Actions"
