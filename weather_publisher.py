@@ -2,6 +2,7 @@
 import os
 import json
 import sys
+import urllib.error
 import urllib.request
 import paho.mqtt.client as mqtt
 import ssl
@@ -18,13 +19,28 @@ MQTT_TOPIC = "meteo/dairago/dati"
 MQTT_CLIENT_ID = "github_actions_dairago"
 
 
+FETCH_ATTEMPTS = 4
+FETCH_RETRY_DELAYS = [5, 15, 30]
+
+
 def fetch_weather():
     url = f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}&current=wind_speed_10m,wind_gusts_10m,precipitation,cloud_cover,weather_code&timezone={TIMEZONE}"
-    print("Chiamata API Open-Meteo")
-    with urllib.request.urlopen(url, timeout=15) as response:
-        data = json.loads(response.read().decode("utf-8"))
-    print(f"Dati ricevuti: {data}")
-    return data
+    for attempt in range(1, FETCH_ATTEMPTS + 1):
+        print(f"Chiamata API Open-Meteo (tentativo {attempt}/{FETCH_ATTEMPTS})")
+        try:
+            with urllib.request.urlopen(url, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            print(f"Dati ricevuti: {data}")
+            return data
+        except Exception as e:
+            # Errori 4xx (richiesta errata) non si risolvono riprovando
+            if isinstance(e, urllib.error.HTTPError) and e.code < 500:
+                raise
+            if attempt == FETCH_ATTEMPTS:
+                raise
+            delay = FETCH_RETRY_DELAYS[attempt - 1]
+            print(f"Errore temporaneo Open-Meteo: {e} - nuovo tentativo tra {delay}s")
+            time.sleep(delay)
 
 
 def to_logo_hex(value):
