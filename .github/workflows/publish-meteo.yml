@@ -15,6 +15,8 @@ jobs:
   publish-meteo:
     name: Fetch meteo Dairago and publish to HiveMQ
     runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.publish.outcome == 'success' }}
     
     steps:
       # Step 1: scarica il codice del repository
@@ -34,7 +36,39 @@ jobs:
           pip install paho-mqtt
       
       # Step 4: esegui lo script
+      # Se fallisce non blocca il workflow: ci riprova il job successivo
+      - name: Run weather publisher
+        id: publish
+        continue-on-error: true
+        env:
+          HIVEMQ_PASSWORD: ${{ secrets.HIVEMQ_PASSWORD }}
+        run: python -u weather_publisher.py
+
+  # Secondo tentativo su un runner nuovo (quindi, di norma, con un altro IP):
+  # Open-Meteo a volte non risponde o restituisce 429 a un singolo runner.
+  # Parte solo se il primo job non ha pubblicato; se fallisce anche questo,
+  # il workflow risulta fallito.
+  publish-meteo-retry:
+    name: Retry on a fresh runner
+    needs: publish-meteo
+    if: ${{ always() && needs.publish-meteo.outputs.ok != 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install paho-mqtt
+
       - name: Run weather publisher
         env:
           HIVEMQ_PASSWORD: ${{ secrets.HIVEMQ_PASSWORD }}
-        run: python weather_publisher.py
+        run: python -u weather_publisher.py

@@ -33,8 +33,9 @@ def fetch_weather():
             print(f"Dati ricevuti: {data}")
             return data
         except Exception as e:
-            # Errori 4xx (richiesta errata) non si risolvono riprovando
-            if isinstance(e, urllib.error.HTTPError) and e.code < 500:
+            # Errori 4xx (richiesta errata) non si risolvono riprovando,
+            # tranne 429 (limite di richieste sull'IP condiviso del runner)
+            if isinstance(e, urllib.error.HTTPError) and e.code < 500 and e.code != 429:
                 raise
             if attempt == FETCH_ATTEMPTS:
                 raise
