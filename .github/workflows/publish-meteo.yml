@@ -14,6 +14,10 @@ on:
 jobs:
   publish-meteo:
     name: Fetch meteo Dairago and publish to HiveMQ
+    # SERVIZIO SOSPESO (17/11/2026): i job non vengono eseguiti.
+    # Per riattivare: togliere questa riga "if" e il "false &&" nel job
+    # publish-meteo-retry qui sotto.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       ok: ${{ steps.publish.outcome == 'success' }}
@@ -51,7 +55,7 @@ jobs:
   publish-meteo-retry:
     name: Retry on a fresh runner
     needs: publish-meteo
-    if: ${{ always() && needs.publish-meteo.outputs.ok != 'true' }}
+    if: ${{ false && always() && needs.publish-meteo.outputs.ok != 'true' }}
     runs-on: ubuntu-latest
 
     steps:
